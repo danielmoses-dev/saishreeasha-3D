@@ -747,17 +747,17 @@ export class TowerAssemblyController {
     this.camera.aspect = aspect;
 
     // Portrait / narrow viewports (mobile & portrait iPad):
-    // Frame the full tower in the upper half so copy sits cleanly below without overlapping.
+    // Frame the full tower large in the upper 70% so the text stack sits cleanly at the bottom.
     if (width < 768 || (width < 1024 && aspect < 1.05)) {
-      const fov = 46;
+      const fov = 45;
       const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(fov * 0.5));
-      // Ensure both tower height (~46u) and datum pad width (36u) fit with comfortable margins
-      const distForHeight = 46 / (2 * tanHalfFov * 0.52);
-      const distForWidth = 38 / (2 * tanHalfFov * aspect * 0.88);
-      const dist = Math.max(distForHeight, distForWidth, 74);
+      // Size for the tower itself (~44m tall, ~10m wide with platforms), letting the datum pad bleed gracefully
+      const distForHeight = 45 / (2 * tanHalfFov * 0.62);
+      const dist = Math.max(distForHeight, 76);
 
-      // Shifting target.y DOWN moves the tower UP into the upper half of the viewport
-      const targetY = width < 768 ? 10.5 : 13.5;
+      // Place tower base ~28% from bottom and crown cleanly below the 68px navbar
+      const halfH = dist * tanHalfFov;
+      const targetY = 44.5 - halfH * 0.86;
       this.baseCamPos.set(-14, targetY + 2, dist);
       this.baseCamTarget.set(0, targetY, 0);
       this.camera.fov = fov;
