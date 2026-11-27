@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import gsap from 'gsap';
 import { splitMeshIntoIslands, type SplitIsland } from './splitMeshIslands';
 
@@ -74,6 +73,7 @@ export class TowerAssemblyController {
   private camera: THREE.PerspectiveCamera;
   private pmremGenerator: THREE.PMREMGenerator | null = null;
   private envRT: THREE.WebGLRenderTarget | null = null;
+  private datumTexture: THREE.CanvasTexture | null = null;
 
   private towerRoot: THREE.Group;
   private components = new Map<string, ComponentSnapshot>();
@@ -185,46 +185,128 @@ export class TowerAssemblyController {
     this.container.appendChild(renderer.domElement);
     this.renderer = renderer;
 
+    // Custom industrial studio environment (baked once, 0 FPS runtime cost)
     this.pmremGenerator = new THREE.PMREMGenerator(renderer);
     this.pmremGenerator.compileEquirectangularShader();
-    const roomEnv = new RoomEnvironment();
-    this.envRT = this.pmremGenerator.fromScene(roomEnv, 0.04);
+    const studioEnv = this.buildIndustrialStudioEnv();
+    this.envRT = this.pmremGenerator.fromScene(studioEnv, 0.02);
     this.scene.environment = this.envRT.texture;
-    roomEnv.dispose();
+    this.disposeSceneResources(studioEnv);
+  }
+
+  private buildIndustrialStudioEnv(): THREE.Scene {
+    const envScene = new THREE.Scene();
+    envScene.background = new THREE.Color('#08101C');
+
+    // Subtle overhead & horizon softbox strips for crisp cylindrical metallic highlights
+    const addPanel = (
+      color: string,
+      intensity: number,
+      w: number,
+      h: number,
+      pos: [number, number, number],
+      lookAt: [number, number, number] = [0, 0, 0]
+    ) => {
+      const geo = new THREE.PlaneGeometry(w, h);
+      const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(color).multiplyScalar(intensity),
+        side: THREE.DoubleSide,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(...pos);
+      mesh.lookAt(...lookAt);
+      envScene.add(mesh);
+    };
+
+    // Primary warm-white vertical softbox (front-right)
+    addPanel('#FFF6E8', 4.5, 6, 26, [14, 4, 12]);
+    // Secondary cool steel vertical strip (back-left rim)
+    addPanel('#8AB8EB', 3.4, 5, 24, [-16, 5, -10]);
+    // Crisp high-key specular kicker (front-left)
+    addPanel('#DCE8F7', 2.2, 4, 20, [-12, 2, 14]);
+    // Restrained warm amber low-right accent strip
+    addPanel('#E5A13A', 1.8, 4, 12, [14, -4, -10]);
+    // Soft top sky bounce
+    addPanel('#6888B0', 1.5, 20, 20, [0, 18, 0]);
+
+    return envScene;
+  }
+
+  private disposeSceneResources(targetScene: THREE.Scene): void {
+    targetScene.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) {
+        const mesh = obj as THREE.Mesh;
+        mesh.geometry?.dispose();
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const m of mats) m?.dispose();
+      }
+    });
   }
 
   private setupLighting(): void {
-    const hemi = new THREE.HemisphereLight('#C4D6EB', '#0B1320', 0.65);
+    const hemi = new THREE.HemisphereLight('#C4D6EB', '#0B1320', 0.6);
     this.scene.add(hemi);
 
-    const keyLight = new THREE.DirectionalLight('#FFF5E4', 2.35);
-    keyLight.position.set(28, 52, 34);
+    // Key light with tight shadow frustum around the 43m column for crisp self-shadows
+    const keyLight = new THREE.DirectionalLight('#FFF5E4', 2.45);
+    keyLight.position.set(22, 46, 26);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(1024, 1024);
-    keyLight.shadow.camera.near = 10;
-    keyLight.shadow.camera.far = 140;
-    keyLight.shadow.camera.left = -22;
-    keyLight.shadow.camera.right = 22;
-    keyLight.shadow.camera.top = 48;
-    keyLight.shadow.camera.bottom = -6;
-    keyLight.shadow.bias = -0.0005;
+    keyLight.shadow.camera.near = 12;
+    keyLight.shadow.camera.far = 95;
+    keyLight.shadow.camera.left = -8;
+    keyLight.shadow.camera.right = 8;
+    keyLight.shadow.camera.top = 46;
+    keyLight.shadow.camera.bottom = -2;
+    keyLight.shadow.bias = -0.00035;
+    keyLight.shadow.normalBias = 0.02;
     this.scene.add(keyLight);
 
-    const rimLight = new THREE.DirectionalLight('#7EB0E6', 1.45);
-    rimLight.position.set(-34, 34, -26);
+    const rimLight = new THREE.DirectionalLight('#7EB0E6', 1.5);
+    rimLight.position.set(-30, 32, -24);
     this.scene.add(rimLight);
 
     const amberAccent = new THREE.DirectionalLight('#E5A13A', 0.55);
-    amberAccent.position.set(22, 10, -18);
+    amberAccent.position.set(20, 8, -18);
     this.scene.add(amberAccent);
   }
 
   private setupGroundPlane(): void {
-    const discGeo = new THREE.CircleGeometry(18, 48);
+    // Procedural 256x256 datum pad texture: soft contact AO under foundation + subtle edge ring
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      const cx = 128;
+      const cy = 128;
+      const grad = ctx.createRadialGradient(cx, cy, 8, cx, cy, 128);
+      grad.addColorStop(0.0, '#04070D'); // deep contact AO directly under foundation
+      grad.addColorStop(0.14, '#080E18');
+      grad.addColorStop(0.35, '#0D1623');
+      grad.addColorStop(0.88, '#0A121D');
+      grad.addColorStop(1.0, '#070C14');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 256, 256);
+
+      // Subtle architectural outer datum ring
+      ctx.strokeStyle = 'rgba(126, 176, 230, 0.16)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 122, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    this.datumTexture = tex;
+
+    const discGeo = new THREE.CircleGeometry(18, 64);
     const discMat = new THREE.MeshStandardMaterial({
-      color: '#0A111C',
-      roughness: 0.92,
-      metalness: 0.1,
+      map: tex,
+      roughness: 0.88,
+      metalness: 0.12,
+      envMapIntensity: 0.35,
     });
     const disc = new THREE.Mesh(discGeo, discMat);
     disc.rotation.x = -Math.PI / 2;
@@ -263,9 +345,43 @@ export class TowerAssemblyController {
           ? mesh.material
           : [mesh.material];
 
+        const maxAniso = this.renderer
+          ? Math.min(this.renderer.capabilities.getMaxAnisotropy(), 8)
+          : 4;
+
         for (const mat of matList) {
-          if (mat && 'envMapIntensity' in mat) {
-            (mat as THREE.MeshStandardMaterial).envMapIntensity = 0.72;
+          if (mat && (mat as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+            const std = mat as THREE.MeshStandardMaterial;
+            for (const tex of [std.map, std.roughnessMap, std.metalnessMap, std.normalMap]) {
+              if (tex) {
+                tex.anisotropy = maxAniso;
+              }
+            }
+
+            const mName = std.name;
+            if (mName.includes('Insulation cladding')) {
+              std.envMapIntensity = 1.15;
+              std.metalness = 0.88;
+              std.roughness = 0.3;
+            } else if (mName.includes('Platform grating')) {
+              std.envMapIntensity = 0.95;
+              std.roughness = 0.42;
+            } else if (mName.includes('Structural steel')) {
+              std.envMapIntensity = 0.85;
+              std.metalness = 0.55;
+              std.roughness = 0.45;
+            } else if (mName.includes('Vessel shells')) {
+              std.envMapIntensity = 0.78;
+              std.roughness = 0.38;
+            } else if (mName.includes('Handrails')) {
+              std.envMapIntensity = 0.65;
+              std.roughness = 0.42;
+            } else if (mName.includes('Concrete')) {
+              std.envMapIntensity = 0.28;
+              std.roughness = 0.88;
+            } else {
+              std.envMapIntensity = 0.65;
+            }
           }
           materials.push({
             material: mat,
@@ -805,6 +921,7 @@ export class TowerAssemblyController {
       }
     });
 
+    this.datumTexture?.dispose();
     this.envRT?.dispose();
     this.pmremGenerator?.dispose();
 
