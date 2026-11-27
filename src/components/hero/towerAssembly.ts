@@ -630,22 +630,33 @@ export class TowerAssemblyController {
     const aspect = width / Math.max(height, 1);
     this.camera.aspect = aspect;
 
-    if (width < 768) {
-      // Mobile: center tower horizontally, pull back so full height fits cleanly
-      this.baseCamPos.set(-14, 22.5, 78);
-      this.baseCamTarget.set(0, 21.5, 0);
-      this.camera.fov = 46;
-    } else if (width < 1100) {
-      // Tablet: align right edge of datum pad with container margin
+    // Portrait / narrow viewports (mobile & portrait iPad):
+    // Frame the full tower in the upper half so copy sits cleanly below without overlapping.
+    if (width < 768 || (width < 1024 && aspect < 1.05)) {
+      const fov = 46;
+      const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(fov * 0.5));
+      // Ensure both tower height (~46u) and datum pad width (36u) fit with comfortable margins
+      const distForHeight = 46 / (2 * tanHalfFov * 0.52);
+      const distForWidth = 38 / (2 * tanHalfFov * aspect * 0.88);
+      const dist = Math.max(distForHeight, distForWidth, 74);
+
+      // Shifting target.y DOWN moves the tower UP into the upper half of the viewport
+      const targetY = width < 768 ? 10.5 : 13.5;
+      this.baseCamPos.set(-14, targetY + 2, dist);
+      this.baseCamTarget.set(0, targetY, 0);
+      this.camera.fov = fov;
+    } else if (width < 1180) {
+      // Landscape tablet / small laptop: side-by-side with full vertical breathing room
       const fov = 44;
-      const dist = 68;
-      const halfW = dist * Math.tan(THREE.MathUtils.degToRad(fov * 0.5)) * aspect;
-      const marginPx = Math.min(48, Math.max(20, width * 0.04));
+      const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(fov * 0.5));
+      const dist = Math.max(70, 52 / (2 * tanHalfFov * 0.88));
+      const halfW = dist * tanHalfFov * aspect;
+      const marginPx = Math.min(48, Math.max(24, width * 0.04));
       const marginFrac = marginPx / width;
       const offset = THREE.MathUtils.clamp(
         (1 - 2 * marginFrac) * halfW - 18,
-        8,
-        17
+        10,
+        18
       );
       this.baseCamPos.set(-offset - 8.5, 23, dist);
       this.baseCamTarget.set(-offset, 21.5, 0);
@@ -653,7 +664,7 @@ export class TowerAssemblyController {
     } else {
       // Desktop: match right margin of 18m datum pad to left margin of 1380px container
       const fov = 43;
-      const dist = 65;
+      const dist = 66;
       const halfW = dist * Math.tan(THREE.MathUtils.degToRad(fov * 0.5)) * aspect;
       const padPx = Math.min(48, Math.max(20, width * 0.04));
       const leftMarginPx = Math.max(0, (width - 1380) * 0.5) + padPx;
