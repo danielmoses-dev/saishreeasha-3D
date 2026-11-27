@@ -1,0 +1,806 @@
+import * as THREE from 'three';
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import gsap from 'gsap';
+import { splitMeshIntoIslands, type SplitIsland } from './splitMeshIslands';
+
+export type AssemblyPhase =
+  | 'LOADING'
+  | 'READY_IDLE'
+  | 'SCROLL_CONTROLLED'
+  | 'COMPLETED';
+
+export interface TowerSceneCallbacks {
+  onProgress?: (ratio: number | null) => void;
+  onPhaseChange?: (phase: AssemblyPhase) => void;
+  onScrollUpdate?: (scrollProgress: number) => void;
+  onReady?: () => void;
+  onError?: (error: unknown) => void;
+}
+
+interface ComponentSnapshot {
+  object: THREE.Object3D;
+  originPos: THREE.Vector3;
+  originRot: THREE.Euler;
+  originScale: THREE.Vector3;
+  materials: Array<{
+    material: THREE.Material;
+    originalTransparent: boolean;
+    originalOpacity: number;
+  }>;
+}
+
+const NODE_NAMES = [
+  '01_Foundation',
+  '02_Ladders_Railings',
+  '03_Insulation',
+  '04_Openings',
+  '05_Platforms',
+  '06_Structural_Steel',
+  '07_Tower_Shell',
+] as const;
+
+type NodeName = (typeof NODE_NAMES)[number];
+
+// Fraction of total scroll allocated to 7-stage assembly; remainder rotates the assembled tower
+const ASSEMBLY_END_SCROLL = 0.66;
+// 4 full rotations (1440 deg) during the post-assembly inspection phase
+const POST_ASSEMBLY_ROTATIONS = 4;
+
+/**
+ * Heavy mechanical slam-in curve:
+ * - 0.00 -> 0.78: Accelerates with mass (cubic ease-in) toward the seat.
+ * - 0.78 -> 1.00: Brief, tightly damped 4.5% recoil off the flange before locking at 1.0.
+ */
+function heavySlamEase(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  const impact = 0.78;
+  if (t < impact) {
+    const u = t / impact;
+    return u * u * u;
+  }
+  const dt = (t - impact) / (1 - impact);
+  return 1 - Math.sin(dt * Math.PI) * 0.045 * (1 - dt);
+}
+
+export class TowerAssemblyController {
+  private container: HTMLElement;
+  private callbacks: TowerSceneCallbacks;
+  private reducedMotion: boolean;
+
+  private renderer: THREE.WebGLRenderer | null = null;
+  private scene: THREE.Scene;
+  private camera: THREE.PerspectiveCamera;
+  private pmremGenerator: THREE.PMREMGenerator | null = null;
+  private envRT: THREE.WebGLRenderTarget | null = null;
+
+  private towerRoot: THREE.Group;
+  private components = new Map<string, ComponentSnapshot>();
+  private shellBaseSnapshot: ComponentSnapshot | null = null;
+  private shellNozzles: SplitIsland[] = [];
+  private platformLevels: SplitIsland[] = [];
+  private ladderLevels: SplitIsland[] = [];
+
+  private masterTimeline: gsap.core.Timeline | null = null;
+
+  private phase: AssemblyPhase = 'LOADING';
+  private currentScrollProgress = 0;
+  private targetScrollProgress = 0;
+
+  // Camera & subtle mouse parallax
+  private baseCamPos = new THREE.Vector3(-19, 23, 64);
+  private baseCamTarget = new THREE.Vector3(-10.5, 21.5, 0);
+  private mouseNorm = { x: 0, y: 0 };
+  private smoothedMouse = { x: 0, y: 0 };
+
+  // Render loop management
+  private rafId: number | null = null;
+  private isVisible = true;
+  private isTabActive = true;
+  private needsRender = true;
+  private isDisposed = false;
+  private lastFrameTime = 0;
+  private elapsedIdleTime = 0;
+
+  private resizeObserver: ResizeObserver | null = null;
+
+  constructor(
+    container: HTMLElement,
+    callbacks: TowerSceneCallbacks = {},
+    reducedMotion = false
+  ) {
+    this.container = container;
+    this.callbacks = callbacks;
+    this.reducedMotion = reducedMotion;
+
+    this.scene = new THREE.Scene();
+    this.scene.fog = new THREE.FogExp2('#070C14', 0.0032);
+
+    const width = Math.max(container.clientWidth, 1);
+    const height = Math.max(container.clientHeight, 1);
+    this.camera = new THREE.PerspectiveCamera(44, width / height, 0.5, 280);
+    this.updateCameraFraming(width, height);
+
+    this.towerRoot = new THREE.Group();
+    this.scene.add(this.towerRoot);
+  }
+
+  public async init(modelUrl: string): Promise<void> {
+    if (this.isDisposed) return;
+
+    try {
+      this.setupRenderer();
+      this.setupLighting();
+      this.setupGroundPlane();
+      this.bindEvents();
+
+      const gltf = await this.loadModel(modelUrl);
+      if (this.isDisposed) return;
+
+      this.ingestModel(gltf);
+      this.buildAssemblyTimeline();
+
+      if (this.reducedMotion) {
+        this.applyScrollState(ASSEMBLY_END_SCROLL);
+        this.setPhase('COMPLETED');
+      } else {
+        this.applyScrollState(0);
+        this.setPhase('READY_IDLE');
+      }
+
+      this.renderer?.compile(this.scene, this.camera);
+      this.renderFrame();
+      this.callbacks.onReady?.();
+
+      this.startLoop();
+    } catch (err) {
+      this.callbacks.onError?.(err);
+    }
+  }
+
+  private setupRenderer(): void {
+    const width = Math.max(this.container.clientWidth, 1);
+    const height = Math.max(this.container.clientHeight, 1);
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+      alpha: true,
+    });
+    renderer.setClearColor(0x000000, 0);
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(width, height);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    renderer.domElement.style.display = 'block';
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+
+    this.container.appendChild(renderer.domElement);
+    this.renderer = renderer;
+
+    this.pmremGenerator = new THREE.PMREMGenerator(renderer);
+    this.pmremGenerator.compileEquirectangularShader();
+    const roomEnv = new RoomEnvironment();
+    this.envRT = this.pmremGenerator.fromScene(roomEnv, 0.04);
+    this.scene.environment = this.envRT.texture;
+    roomEnv.dispose();
+  }
+
+  private setupLighting(): void {
+    const hemi = new THREE.HemisphereLight('#C4D6EB', '#0B1320', 0.65);
+    this.scene.add(hemi);
+
+    const keyLight = new THREE.DirectionalLight('#FFF5E4', 2.35);
+    keyLight.position.set(28, 52, 34);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.camera.near = 10;
+    keyLight.shadow.camera.far = 140;
+    keyLight.shadow.camera.left = -22;
+    keyLight.shadow.camera.right = 22;
+    keyLight.shadow.camera.top = 48;
+    keyLight.shadow.camera.bottom = -6;
+    keyLight.shadow.bias = -0.0005;
+    this.scene.add(keyLight);
+
+    const rimLight = new THREE.DirectionalLight('#7EB0E6', 1.45);
+    rimLight.position.set(-34, 34, -26);
+    this.scene.add(rimLight);
+
+    const amberAccent = new THREE.DirectionalLight('#E5A13A', 0.55);
+    amberAccent.position.set(22, 10, -18);
+    this.scene.add(amberAccent);
+  }
+
+  private setupGroundPlane(): void {
+    const discGeo = new THREE.CircleGeometry(18, 48);
+    const discMat = new THREE.MeshStandardMaterial({
+      color: '#0A111C',
+      roughness: 0.92,
+      metalness: 0.1,
+    });
+    const disc = new THREE.Mesh(discGeo, discMat);
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.y = -0.02;
+    disc.receiveShadow = true;
+    this.scene.add(disc);
+  }
+
+  private loadModel(url: string): Promise<GLTF> {
+    const loader = new GLTFLoader();
+    return new Promise((resolve, reject) => {
+      loader.load(
+        url,
+        (gltf) => resolve(gltf),
+        (xhr) => {
+          if (xhr.lengthComputable && xhr.total > 0) {
+            this.callbacks.onProgress?.(Math.min(xhr.loaded / xhr.total, 1));
+          } else {
+            this.callbacks.onProgress?.(null);
+          }
+        },
+        (err) => reject(err)
+      );
+    });
+  }
+
+  private registerSnapshot(key: string, obj: THREE.Object3D): ComponentSnapshot {
+    const materials: ComponentSnapshot['materials'] = [];
+    obj.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        const matList = Array.isArray(mesh.material)
+          ? mesh.material
+          : [mesh.material];
+
+        for (const mat of matList) {
+          if (mat && 'envMapIntensity' in mat) {
+            (mat as THREE.MeshStandardMaterial).envMapIntensity = 0.72;
+          }
+          materials.push({
+            material: mat,
+            originalTransparent: mat.transparent,
+            originalOpacity: mat.opacity,
+          });
+        }
+      }
+    });
+
+    const snap: ComponentSnapshot = {
+      object: obj,
+      originPos: obj.position.clone(),
+      originRot: obj.rotation.clone(),
+      originScale: obj.scale.clone(),
+      materials,
+    };
+    this.components.set(key, snap);
+    return snap;
+  }
+
+  private replaceWithSplitIslands(
+    root: THREE.Object3D,
+    nodeName: NodeName,
+    prefix: string,
+    elevationBands?: Array<{ minY: number; maxY: number }>
+  ): SplitIsland[] {
+    const obj = root.getObjectByName(nodeName);
+    if (!obj || !(obj as THREE.Mesh).isMesh) return [];
+
+    const sourceMesh = obj as THREE.Mesh;
+    const parent = sourceMesh.parent ?? root;
+    const islands = splitMeshIntoIslands(sourceMesh, prefix, elevationBands);
+
+    if (islands.length === 0) {
+      this.registerSnapshot(nodeName, sourceMesh);
+      return [];
+    }
+
+    for (const isl of islands) {
+      parent.add(isl.mesh);
+      this.registerSnapshot(isl.mesh.name, isl.mesh);
+    }
+
+    // Remove and dispose original unsplit mesh
+    parent.remove(sourceMesh);
+    sourceMesh.geometry?.dispose();
+    const mats = Array.isArray(sourceMesh.material)
+      ? sourceMesh.material
+      : [sourceMesh.material];
+    for (const m of mats) m?.dispose();
+
+    return islands;
+  }
+
+  private ingestModel(gltf: GLTF): void {
+    const root = gltf.scene;
+
+    for (const name of NODE_NAMES) {
+      if (name === '07_Tower_Shell') {
+        const shellParts = this.replaceWithSplitIslands(root, name, '07_ShellPart');
+        if (shellParts.length > 0) {
+          // Island 1 (lowest & largest, y=0..3.45) is the base skirt; remaining 7 are nozzles
+          this.shellBaseSnapshot =
+            this.components.get(shellParts[0].mesh.name) ?? null;
+          this.shellNozzles = shellParts.slice(1);
+        }
+        continue;
+      }
+
+      if (name === '05_Platforms') {
+        this.platformLevels = this.replaceWithSplitIslands(root, name, '05_Platform');
+        continue;
+      }
+
+      if (name === '02_Ladders_Railings') {
+        // Cluster 205 rungs/cages/handrails into 6 elevation bands matching the 6 platforms
+        const ladderBands = [
+          { minY: -1, maxY: 9.0 },
+          { minY: 9.0, maxY: 15.5 },
+          { minY: 15.5, maxY: 22.0 },
+          { minY: 22.0, maxY: 28.5 },
+          { minY: 28.5, maxY: 35.5 },
+          { minY: 35.5, maxY: 60.0 },
+        ];
+        this.ladderLevels = this.replaceWithSplitIslands(
+          root,
+          name,
+          '02_LadderLevel',
+          ladderBands
+        );
+        continue;
+      }
+
+      const obj = root.getObjectByName(name);
+      if (obj) {
+        this.registerSnapshot(name, obj);
+      }
+    }
+
+    this.towerRoot.add(root);
+  }
+
+  private setComponentOpacity(snap: ComponentSnapshot, alpha: number): void {
+    for (const entry of snap.materials) {
+      const clamped = THREE.MathUtils.clamp(alpha, 0, 1);
+      if (clamped >= 0.999) {
+        entry.material.transparent = entry.originalTransparent;
+        entry.material.opacity = entry.originalOpacity;
+      } else {
+        entry.material.transparent = true;
+        entry.material.opacity = entry.originalOpacity * clamped;
+      }
+      entry.material.needsUpdate = false;
+    }
+  }
+
+  private buildAssemblyTimeline(): void {
+    const tl = gsap.timeline({ paused: true });
+
+    const animatePart = (
+      key: string,
+      startTime: number,
+      duration: number,
+      offset: {
+        x?: number;
+        y?: number;
+        z?: number;
+        rx?: number;
+        ry?: number;
+        rz?: number;
+        scale?: number;
+        minAlpha?: number;
+      },
+      ease: string | ((t: number) => number) = heavySlamEase
+    ) => {
+      const snap = this.components.get(key);
+      if (!snap) return;
+
+      const { object, originPos, originRot, originScale } = snap;
+      const proxy = { t: 0 };
+      const startScale = offset.scale ?? 1;
+      const minAlpha = offset.minAlpha ?? 0;
+
+      tl.fromTo(
+        proxy,
+        { t: 0 },
+        {
+          t: 1,
+          duration,
+          ease,
+          onUpdate: () => {
+            const p = proxy.t;
+            const inv = 1 - p;
+
+            object.position.set(
+              originPos.x + (offset.x ?? 0) * inv,
+              originPos.y + (offset.y ?? 0) * inv,
+              originPos.z + (offset.z ?? 0) * inv
+            );
+
+            object.rotation.set(
+              originRot.x + (offset.rx ?? 0) * inv,
+              originRot.y + (offset.ry ?? 0) * inv,
+              originRot.z + (offset.rz ?? 0) * inv
+            );
+
+            const s = THREE.MathUtils.lerp(startScale, 1, p);
+            object.scale.set(
+              originScale.x * s,
+              originScale.y * s,
+              originScale.z * s
+            );
+
+            const alpha = THREE.MathUtils.lerp(
+              minAlpha,
+              1,
+              THREE.MathUtils.clamp(p / 0.35, 0, 1)
+            );
+            this.setComponentOpacity(snap, alpha);
+            object.visible = alpha > 0.01;
+          },
+        },
+        startTime
+      );
+    };
+
+    // 1. Foundation rises from below to establish the datum
+    animatePart('01_Foundation', 0.0, 0.1, { y: -3.8, scale: 0.96 }, heavySlamEase);
+
+    // 2. Shell Base Skirt starts grounded in its exact position (no floating/hover)
+    if (this.shellBaseSnapshot) {
+      animatePart(
+        this.shellBaseSnapshot.object.name,
+        0.0,
+        0.01,
+        { minAlpha: 1 },
+        'none'
+      );
+    }
+
+    // 3. 7 Shell Nozzles start just slightly pulled out & slam into their ports one by one
+    this.shellNozzles.forEach((nozzle, i) => {
+      const isCrown = i === this.shellNozzles.length - 1;
+      const dirLen = Math.hypot(nozzle.centerX, nozzle.centerZ) || 1;
+      const pullOut = 0.95;
+      const offsetX = isCrown ? 0 : (nozzle.centerX / dirLen) * pullOut;
+      const offsetZ = isCrown ? 0 : (nozzle.centerZ / dirLen) * pullOut;
+      const offsetY = isCrown ? 0.9 : 0;
+
+      animatePart(
+        nozzle.mesh.name,
+        0.11 + i * 0.03,
+        0.07,
+        {
+          x: offsetX,
+          y: offsetY,
+          z: offsetZ,
+          minAlpha: 1,
+        },
+        heavySlamEase
+      );
+    });
+
+    // 4. Aluminium Insulation Cladding drops & seats over the column core
+    animatePart('03_Insulation', 0.35, 0.11, { y: 6.5, scale: 1.03 }, heavySlamEase);
+
+    // 5. 6 Platforms slide in from their respective sides and lock into place
+    this.platformLevels.forEach((plat, i) => {
+      const isCrownRing = i === this.platformLevels.length - 1;
+      const sideX = isCrownRing ? 0 : plat.centerX >= 0 ? 5.5 : -5.5;
+      const dropY = isCrownRing ? 4.2 : 0.8;
+      animatePart(
+        plat.mesh.name,
+        0.45 + i * 0.035,
+        0.08,
+        { x: sideX, y: dropY, scale: 0.98 },
+        heavySlamEase
+      );
+    });
+
+    // 6. Structural Steel jib slams onto the crown
+    animatePart('06_Structural_Steel', 0.67, 0.085, { x: 4.5, y: 4.0 }, heavySlamEase);
+
+    // 7. 6 Ladder & Railing Levels lock in one by one bottom-to-top
+    this.ladderLevels.forEach((lvl, i) => {
+      const sideX = Math.abs(lvl.centerX) > 0.3 ? Math.sign(lvl.centerX) * 3.2 : 0;
+      animatePart(
+        lvl.mesh.name,
+        0.74 + i * 0.028,
+        0.075,
+        { x: sideX, z: 4.0, y: 1.0 },
+        heavySlamEase
+      );
+    });
+
+    // 8. Final Openings / Manway slams into base port
+    animatePart('04_Openings', 0.91, 0.09, { z: 3.5, y: 0.3 }, heavySlamEase);
+
+    tl.totalDuration(1.0);
+    this.masterTimeline = tl;
+  }
+
+  private applyIdleHover(t: number, blend: number): void {
+    if (blend <= 0.001) return;
+
+    // Lower base stays grounded; each nozzle breathes gently along its own port axis
+    this.shellNozzles.forEach((nozzle, i) => {
+      const isCrown = i === this.shellNozzles.length - 1;
+      const phase = i * 0.9;
+      const delta = Math.sin(t * 0.85 + phase) * 0.08 * blend;
+
+      if (isCrown) {
+        nozzle.mesh.position.y += delta;
+      } else {
+        const dirLen = Math.hypot(nozzle.centerX, nozzle.centerZ) || 1;
+        nozzle.mesh.position.x += (nozzle.centerX / dirLen) * delta;
+        nozzle.mesh.position.z += (nozzle.centerZ / dirLen) * delta;
+      }
+    });
+  }
+
+  private applyScrollState(sp: number): void {
+    const assemblyP = THREE.MathUtils.clamp(sp / ASSEMBLY_END_SCROLL, 0, 1);
+    const rotationP = THREE.MathUtils.clamp(
+      (sp - ASSEMBLY_END_SCROLL) / (1 - ASSEMBLY_END_SCROLL),
+      0,
+      1
+    );
+
+    this.masterTimeline?.progress(assemblyP);
+
+    // Zero-G hover fades out smoothly as scroll pulls the exploded shell together
+    const hoverBlend = this.reducedMotion
+      ? 0
+      : 1 - THREE.MathUtils.clamp(sp / 0.14, 0, 1);
+    this.applyIdleHover(this.elapsedIdleTime, hoverBlend);
+
+    // Post-assembly 1.5 full rotations
+    this.towerRoot.rotation.y = rotationP * Math.PI * 2 * POST_ASSEMBLY_ROTATIONS;
+
+    this.applyCameraForProgress(assemblyP);
+  }
+
+  private applyCameraForProgress(assemblyP: number): void {
+    const orbitAngle = THREE.MathUtils.lerp(-0.16, 0, this.easeOutCubic(assemblyP));
+    const cos = Math.cos(orbitAngle);
+    const sin = Math.sin(orbitAngle);
+
+    const bx = this.baseCamPos.x - this.baseCamTarget.x;
+    const bz = this.baseCamPos.z - this.baseCamTarget.z;
+
+    const orbitedX = this.baseCamTarget.x + (bx * cos - bz * sin);
+    const orbitedZ = this.baseCamTarget.z + (bx * sin + bz * cos);
+
+    const elevOffset = THREE.MathUtils.lerp(-2.5, 0, this.easeOutCubic(assemblyP));
+
+    const parallaxX = this.smoothedMouse.x * 1.4;
+    const parallaxY = this.smoothedMouse.y * 0.8;
+
+    this.camera.position.set(
+      orbitedX + parallaxX,
+      this.baseCamPos.y + elevOffset + parallaxY,
+      orbitedZ
+    );
+    this.camera.lookAt(
+      this.baseCamTarget.x + parallaxX * 0.15,
+      this.baseCamTarget.y,
+      this.baseCamTarget.z
+    );
+  }
+
+  private easeOutCubic(x: number): number {
+    return 1 - Math.pow(1 - x, 3);
+  }
+
+  public handleScrollProgress(scrollProgress: number): void {
+    if (this.reducedMotion || this.isDisposed) return;
+
+    const sp = THREE.MathUtils.clamp(scrollProgress, 0, 1);
+    this.targetScrollProgress = sp;
+    this.needsRender = true;
+
+    if (sp <= 0.01) {
+      this.setPhase('READY_IDLE');
+    } else if (sp >= 0.995) {
+      this.setPhase('COMPLETED');
+    } else {
+      this.setPhase('SCROLL_CONTROLLED');
+    }
+
+    this.callbacks.onScrollUpdate?.(sp);
+  }
+
+  private setPhase(next: AssemblyPhase): void {
+    if (this.phase === next) return;
+    this.phase = next;
+    this.callbacks.onPhaseChange?.(next);
+  }
+
+  private updateCameraFraming(width: number, height: number): void {
+    const aspect = width / Math.max(height, 1);
+    this.camera.aspect = aspect;
+
+    if (width < 768) {
+      // Mobile: center tower horizontally, pull back so full height fits cleanly
+      this.baseCamPos.set(-14, 22.5, 78);
+      this.baseCamTarget.set(0, 21.5, 0);
+      this.camera.fov = 46;
+    } else if (width < 1100) {
+      // Tablet: align right edge of datum pad with container margin
+      const fov = 44;
+      const dist = 68;
+      const halfW = dist * Math.tan(THREE.MathUtils.degToRad(fov * 0.5)) * aspect;
+      const marginPx = Math.min(48, Math.max(20, width * 0.04));
+      const marginFrac = marginPx / width;
+      const offset = THREE.MathUtils.clamp(
+        (1 - 2 * marginFrac) * halfW - 18,
+        8,
+        17
+      );
+      this.baseCamPos.set(-offset - 8.5, 23, dist);
+      this.baseCamTarget.set(-offset, 21.5, 0);
+      this.camera.fov = fov;
+    } else {
+      // Desktop: match right margin of 18m datum pad to left margin of 1380px container
+      const fov = 43;
+      const dist = 65;
+      const halfW = dist * Math.tan(THREE.MathUtils.degToRad(fov * 0.5)) * aspect;
+      const padPx = Math.min(48, Math.max(20, width * 0.04));
+      const leftMarginPx = Math.max(0, (width - 1380) * 0.5) + padPx;
+      const marginFrac = leftMarginPx / width;
+      const offset = THREE.MathUtils.clamp(
+        (1 - 2 * marginFrac) * halfW - 18,
+        14,
+        21
+      );
+      this.baseCamPos.set(-offset - 8.5, 23, dist);
+      this.baseCamTarget.set(-offset, 21.5, 0);
+      this.camera.fov = fov;
+    }
+
+    this.camera.updateProjectionMatrix();
+    this.needsRender = true;
+  }
+
+  private bindEvents(): void {
+    this.resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0 && this.renderer) {
+          this.renderer.setSize(width, height);
+          this.updateCameraFraming(width, height);
+        }
+      }
+    });
+    this.resizeObserver.observe(this.container);
+
+    window.addEventListener('pointermove', this.onPointerMove, { passive: true });
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+  }
+
+  private onPointerMove = (e: PointerEvent): void => {
+    if (this.reducedMotion) return;
+    const nx = (e.clientX / Math.max(window.innerWidth, 1)) * 2 - 1;
+    const ny = -((e.clientY / Math.max(window.innerHeight, 1)) * 2 - 1);
+    this.mouseNorm.x = THREE.MathUtils.clamp(nx, -1, 1);
+    this.mouseNorm.y = THREE.MathUtils.clamp(ny, -1, 1);
+    this.needsRender = true;
+  };
+
+  private onVisibilityChange = (): void => {
+    this.isTabActive = document.visibilityState === 'visible';
+    if (this.isTabActive) {
+      this.lastFrameTime = performance.now();
+      this.needsRender = true;
+    }
+  };
+
+  public setViewportVisibility(visible: boolean): void {
+    this.isVisible = visible;
+    if (visible) {
+      this.lastFrameTime = performance.now();
+      this.needsRender = true;
+    }
+  }
+
+  private startLoop(): void {
+    this.lastFrameTime = performance.now();
+    const tick = (now: number) => {
+      if (this.isDisposed) return;
+      this.rafId = requestAnimationFrame(tick);
+
+      if (!this.isTabActive || !this.isVisible) return;
+
+      const dt = Math.min((now - this.lastFrameTime) / 1000, 0.1);
+      this.lastFrameTime = now;
+
+      let active = this.needsRender;
+
+      // Idle zero-G hovering runs continuously while exploded shell is visible
+      if (!this.reducedMotion && this.currentScrollProgress < 0.14) {
+        this.elapsedIdleTime += dt;
+        active = true;
+      }
+
+      // Smoothly damp scroll-driven progress for weighty mechanical feel
+      const diff = this.targetScrollProgress - this.currentScrollProgress;
+      if (Math.abs(diff) > 0.00025) {
+        const factor = 1 - Math.exp(-8.5 * dt);
+        this.currentScrollProgress += diff * factor;
+        active = true;
+      } else if (diff !== 0) {
+        this.currentScrollProgress = this.targetScrollProgress;
+        active = true;
+      }
+
+      // Smoothly damp mouse parallax
+      if (!this.reducedMotion) {
+        const dx = this.mouseNorm.x - this.smoothedMouse.x;
+        const dy = this.mouseNorm.y - this.smoothedMouse.y;
+        if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+          const mFactor = 1 - Math.exp(-5 * dt);
+          this.smoothedMouse.x += dx * mFactor;
+          this.smoothedMouse.y += dy * mFactor;
+          active = true;
+        }
+      }
+
+      if (active) {
+        this.applyScrollState(this.currentScrollProgress);
+        this.renderFrame();
+        this.needsRender = false;
+      }
+    };
+
+    this.rafId = requestAnimationFrame(tick);
+  }
+
+  private renderFrame(): void {
+    if (!this.renderer) return;
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  public dispose(): void {
+    this.isDisposed = true;
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+
+    this.masterTimeline?.kill();
+    this.resizeObserver?.disconnect();
+
+    window.removeEventListener('pointermove', this.onPointerMove);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+
+    this.scene.traverse((obj) => {
+      if ((obj as THREE.Mesh).isMesh) {
+        const mesh = obj as THREE.Mesh;
+        mesh.geometry?.dispose();
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        for (const m of mats) {
+          m?.dispose();
+        }
+      }
+    });
+
+    this.envRT?.dispose();
+    this.pmremGenerator?.dispose();
+
+    if (this.renderer) {
+      this.renderer.dispose();
+      this.renderer.domElement.remove();
+      this.renderer = null;
+    }
+  }
+}

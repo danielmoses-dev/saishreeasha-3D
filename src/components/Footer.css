@@ -1,0 +1,116 @@
+.footer {
+  background-color: var(--color-navy-deep);
+  color: var(--color-surface);
+  padding-top: clamp(4rem, 7vw, 5.5rem);
+  padding-bottom: 2.5rem;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.footer__grid {
+  display: grid;
+  grid-template-columns: 1.4fr 0.85fr 1.15fr 1.25fr;
+  gap: clamp(2rem, 4vw, 3.5rem);
+  padding-bottom: 3.5rem;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.footer__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+.footer__legal {
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--color-amber);
+  text-transform: uppercase;
+  margin-bottom: 0.875rem;
+}
+
+.footer__desc {
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.68);
+  max-width: 36ch;
+}
+
+.footer__heading {
+  font-family: var(--font-heading);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-steel-light);
+  margin-bottom: 1.25rem;
+}
+
+.footer__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.footer__link {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.74);
+  transition: color var(--duration-fast) var(--ease-out);
+  line-height: 1.45;
+}
+
+.footer__link:hover {
+  color: var(--color-amber);
+}
+
+.footer__offices {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.footer__office-title {
+  font-family: var(--font-heading);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-surface);
+  margin-bottom: 0.35rem;
+}
+
+.footer__address {
+  font-style: normal;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.footer__bottom {
+  padding-top: 1.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 1080px) {
+  .footer__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .footer__grid {
+    grid-template-columns: 1fr;
+  }
+}
