@@ -496,3 +496,80 @@ export const INDUSTRIES: IndustryItem[] = [
     image: '/images/hero-plant.jpg',
   },
 ];
+
+export interface FeaturedEquipmentItem {
+  code: string;
+  name: string;
+  brand?: string;
+  summary: string;
+  image: string;
+  imageAlt: string;
+  to: string;
+  ctaLabel: string;
+}
+
+export const FEATURED_EQUIPMENT: FeaturedEquipmentItem[] = [
+  {
+    code: '01',
+    name: 'Compressors',
+    summary:
+      'Industrial air compressors, air preparation units, distribution accessories, and maintenance spares.',
+    image: '/images/featured/compressors.jpg',
+    imageAlt: 'Industrial rotary air compressor unit on studio stage',
+    to: '/products/air-compressors',
+    ctaLabel: 'Explore Range',
+  },
+  {
+    code: '02',
+    name: 'Welding Machines & Accessories',
+    summary:
+      'Heavy-duty welding machines, plasma cutters, MIG/TIG consumables, electrodes, torches, and cables.',
+    image: '/images/featured/welding.jpg',
+    imageAlt: 'Industrial inverter welding machine with torch and clamp',
+    to: '/products/welding-cutting',
+    ctaLabel: 'Explore Range',
+  },
+  {
+    code: '03',
+    name: 'Power Tools',
+    brand: 'DeWalt',
+    summary:
+      'Industrial DeWalt angle grinders, drilling machines, cordless tools, and cutting or grinding consumables.',
+    image: '/images/featured/power-tools-dewalt.jpg',
+    imageAlt: 'DeWalt industrial cordless drill and angle grinder kit',
+    to: '/products/power-tools',
+    ctaLabel: 'Explore Range',
+  },
+  {
+    code: '04',
+    name: 'NDT Test Equipment',
+    brand: 'Magin Ltd',
+    summary:
+      'Magin Ltd non-destructive testing instruments, dye penetrant, magnetic particle, and inspection consumables.',
+    image: '/images/featured/ndt-magin.jpg',
+    imageAlt: 'Magin Ltd industrial ultrasonic NDT flaw detector unit',
+    to: '/products/ndt-inspection',
+    ctaLabel: 'Explore Range',
+  },
+  {
+    code: '05',
+    name: 'Airless Spray Machines',
+    brand: 'Graco',
+    summary:
+      'High-pressure Graco airless coating sprayers, pumps, spray guns, and protective coating hose assemblies.',
+    image: '/images/featured/airless-spray-graco.jpg',
+    imageAlt: 'Graco industrial airless paint sprayer cart with high-pressure hose',
+    to: '/contact',
+    ctaLabel: 'Request a Quote',
+  },
+  {
+    code: '06',
+    name: 'Blasting Equipment & Accessories',
+    summary:
+      'Abrasive blasting machines, pressure pots, blast hoses, couplings, nozzles, and surface prep consumables.',
+    image: '/images/featured/blasting.jpg',
+    imageAlt: 'Industrial abrasive sandblasting pressure pot and blast hose',
+    to: '/products/abrasive-blasting',
+    ctaLabel: 'Explore Range',
+  },
+];

@@ -60,6 +60,141 @@
 }
 
 /* ==========================================================================
+   SECTION 02B: FEATURED EQUIPMENT & PARTNER BRANDS
+   ========================================================================== */
+.featured-equipment-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.equipment-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition: border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.equipment-card:hover {
+  border-color: var(--color-navy);
+  transform: translateY(-2px);
+}
+
+.equipment-card__stage {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background-color: #f2f3f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.equipment-card__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 380ms var(--ease-out);
+}
+
+.equipment-card:hover .equipment-card__img {
+  transform: scale(1.04);
+}
+
+.equipment-card__code {
+  position: absolute;
+  top: 0.9rem;
+  left: 1rem;
+  z-index: 2;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-steel);
+}
+
+.equipment-card__brand {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.95rem;
+  z-index: 2;
+  padding: 0.28rem 0.6rem;
+  background-color: var(--color-navy);
+  color: var(--color-surface);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-left: 2px solid var(--color-amber);
+  border-radius: var(--radius-sm);
+}
+
+.equipment-card__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 1.35rem 1.4rem 1.45rem;
+}
+
+.equipment-card__title {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-navy);
+  margin-bottom: 0.5rem;
+}
+
+.equipment-card__desc {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--color-steel);
+  margin-bottom: 1.15rem;
+  flex: 1;
+}
+
+.equipment-card__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-navy);
+}
+
+.equipment-card__cta svg {
+  color: var(--color-amber-hover);
+  transition: transform 220ms var(--ease-out);
+}
+
+.equipment-card:hover .equipment-card__cta svg {
+  transform: translateX(4px);
+}
+
+@media (max-width: 1023px) {
+  .featured-equipment-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 639px) {
+  .featured-equipment-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
    SECTION 03: INTERACTIVE PRODUCT EXPLORER
    ========================================================================== */
 .section-header {

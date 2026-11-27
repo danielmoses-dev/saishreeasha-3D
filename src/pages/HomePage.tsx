@@ -15,6 +15,7 @@ import { CTASection } from '../components/CTASection';
 import { HeroTowerCanvas } from '../components/hero/HeroTowerCanvas';
 import {
   COMPANY,
+  FEATURED_EQUIPMENT,
   INDUSTRIES,
   PROCUREMENT_STEPS,
   PRODUCT_CATEGORIES,
@@ -152,8 +153,57 @@ export function HomePage() {
         </div>
       </section>
 
+      {/* SECTION 02B — FEATURED EQUIPMENT & PARTNER BRANDS */}
+      <section className="section section--alt" aria-labelledby="featured-equipment-heading">
+        <div className="container">
+          <Reveal>
+            <div className="section-header">
+              <div className="section-header__copy">
+                <span className="eyebrow">Key Equipment &amp; Partner Brands</span>
+                <h2 id="featured-equipment-heading" className="heading-lg">
+                  Core Industrial Equipment
+                </h2>
+              </div>
+              <Link to="/contact" className="btn btn--outline-dark">
+                Request Equipment Quote
+                <ArrowRight size={16} />
+              </Link>
+            </div>
+          </Reveal>
+
+          <div className="featured-equipment-grid">
+            {FEATURED_EQUIPMENT.map((item, idx) => (
+              <Reveal key={item.code} delay={idx * 55}>
+                <Link to={item.to} className="equipment-card">
+                  <div className="equipment-card__stage">
+                    <span className="equipment-card__code">{item.code}</span>
+                    {item.brand && (
+                      <span className="equipment-card__brand">{item.brand}</span>
+                    )}
+                    <img
+                      src={item.image}
+                      alt={item.imageAlt}
+                      className="equipment-card__img"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="equipment-card__body">
+                    <h3 className="equipment-card__title">{item.name}</h3>
+                    <p className="equipment-card__desc">{item.summary}</p>
+                    <span className="equipment-card__cta">
+                      {item.ctaLabel}
+                      <ArrowRight size={15} />
+                    </span>
+                  </div>
+                </Link>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* SECTION 03 — INTERACTIVE PRODUCT EXPLORER */}
-      <section className="section section--alt" aria-labelledby="products-heading">
+      <section className="section section--white" aria-labelledby="products-heading">
         <div className="container">
           <Reveal>
             <div className="section-header">
