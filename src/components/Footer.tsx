@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { COMPANY, PRODUCT_CATEGORIES } from '../data/companyData';
+import { COMPANY, FEATURED_EQUIPMENT } from '../data/companyData';
 import './Footer.css';
 
 export function Footer() {
@@ -55,10 +55,10 @@ export function Footer() {
           <div>
             <h2 className="footer__heading">Product Portfolio</h2>
             <ul className="footer__list">
-              {PRODUCT_CATEGORIES.map((cat) => (
-                <li key={cat.slug}>
-                  <Link to={`/products/${cat.slug}`} className="footer__link">
-                    {cat.name}
+              {FEATURED_EQUIPMENT.map((item) => (
+                <li key={item.slug}>
+                  <Link to={item.to} className="footer__link">
+                    {item.brand ? `${item.name} (${item.brand})` : item.name}
                   </Link>
                 </li>
               ))}

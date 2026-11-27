@@ -18,7 +18,6 @@ import {
   FEATURED_EQUIPMENT,
   INDUSTRIES,
   PROCUREMENT_STEPS,
-  PRODUCT_CATEGORIES,
   WHY_CHOOSE_US,
 } from '../data/companyData';
 import './HomePage.css';
@@ -34,7 +33,6 @@ const WHY_ICONS = {
 
 export function HomePage() {
   const [introParallax, setIntroParallax] = useState(0);
-  const [activeCategoryIdx, setActiveCategoryIdx] = useState(0);
   const [timelineActive, setTimelineActive] = useState(false);
 
   const introRef = useRef<HTMLElement>(null);
@@ -85,8 +83,6 @@ export function HomePage() {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-
-  const activeCategory = PRODUCT_CATEGORIES[activeCategoryIdx];
 
   const featuredIndustries = [
     INDUSTRIES[0], // Oil & Gas
@@ -153,19 +149,19 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* SECTION 02B — FEATURED EQUIPMENT & PARTNER BRANDS */}
-      <section className="section section--alt" aria-labelledby="featured-equipment-heading">
+      {/* SECTION 03 — PRODUCTS & SOLUTIONS (6 CORE EQUIPMENT LINES) */}
+      <section className="section section--alt" aria-labelledby="products-heading">
         <div className="container">
           <Reveal>
             <div className="section-header">
               <div className="section-header__copy">
-                <span className="eyebrow">Key Equipment &amp; Partner Brands</span>
-                <h2 id="featured-equipment-heading" className="heading-lg">
+                <span className="eyebrow">Products &amp; Solutions</span>
+                <h2 id="products-heading" className="heading-lg">
                   Core Industrial Equipment
                 </h2>
               </div>
-              <Link to="/contact" className="btn btn--outline-dark">
-                Request Equipment Quote
+              <Link to="/products" className="btn btn--outline-dark">
+                View Full Specifications
                 <ArrowRight size={16} />
               </Link>
             </div>
@@ -198,88 +194,6 @@ export function HomePage() {
                 </Link>
               </Reveal>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* SECTION 03 — INTERACTIVE PRODUCT EXPLORER */}
-      <section className="section section--white" aria-labelledby="products-heading">
-        <div className="container">
-          <Reveal>
-            <div className="section-header">
-              <div className="section-header__copy">
-                <span className="eyebrow">Products &amp; Solutions</span>
-                <h2 id="products-heading" className="heading-lg">
-                  Core Industrial Product Portfolio
-                </h2>
-              </div>
-              <Link to="/products" className="btn btn--outline-dark">
-                View All Products
-                <ArrowRight size={16} />
-              </Link>
-            </div>
-          </Reveal>
-
-          <div className="product-index-layout">
-            <div className="product-index-list">
-              {PRODUCT_CATEGORIES.map((category, idx) => {
-                const isActive = idx === activeCategoryIdx;
-                return (
-                  <Link
-                    key={category.slug}
-                    to={`/products/${category.slug}`}
-                    className={`product-index-row ${
-                      isActive ? 'product-index-row--active' : ''
-                    }`}
-                    onMouseEnter={() => setActiveCategoryIdx(idx)}
-                    onFocus={() => setActiveCategoryIdx(idx)}
-                  >
-                    <span className="product-index-row__code">{category.code}</span>
-                    <div>
-                      <h3 className="product-index-row__title">{category.name}</h3>
-                      <p className="product-index-row__desc">{category.shortDesc}</p>
-                    </div>
-                    <ArrowRight size={18} className="product-index-row__arrow" />
-                  </Link>
-                );
-              })}
-            </div>
-
-            <aside className="product-preview" aria-live="polite">
-              <div className="product-preview__media">
-                <img
-                  key={activeCategory.slug}
-                  src={activeCategory.image}
-                  alt={activeCategory.imageAlt}
-                  className="product-preview__img"
-                />
-                <span className="product-preview__badge">
-                  Category {activeCategory.code}
-                </span>
-              </div>
-              <div className="product-preview__body">
-                <h3 className="product-preview__title">{activeCategory.name}</h3>
-                <p className="body-md" style={{ color: 'rgba(255,255,255,0.74)' }}>
-                  {activeCategory.shortDesc}
-                </p>
-                <ul className="product-preview__items">
-                  {activeCategory.items.slice(0, 4).map((item, i) => (
-                    <li key={i}>
-                      <span className="product-preview__dot" aria-hidden="true" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  to={`/products/${activeCategory.slug}`}
-                  className="btn btn--primary"
-                  style={{ width: '100%' }}
-                >
-                  Explore Category
-                  <ArrowRight size={16} />
-                </Link>
-              </div>
-            </aside>
           </div>
         </div>
       </section>

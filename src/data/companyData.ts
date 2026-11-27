@@ -499,9 +499,13 @@ export const INDUSTRIES: IndustryItem[] = [
 
 export interface FeaturedEquipmentItem {
   code: string;
+  slug: string;
   name: string;
   brand?: string;
   summary: string;
+  overview: string;
+  items: string[];
+  applications: string[];
   image: string;
   imageAlt: string;
   to: string;
@@ -511,65 +515,149 @@ export interface FeaturedEquipmentItem {
 export const FEATURED_EQUIPMENT: FeaturedEquipmentItem[] = [
   {
     code: '01',
+    slug: 'compressors',
     name: 'Compressors',
     summary:
       'Industrial air compressors, air preparation units, distribution accessories, and maintenance spares.',
+    overview:
+      'Reliable compressed-air systems and downstream air-preparation packages engineered for continuous industrial duty, fabrication shops, and process utility lines.',
+    items: [
+      'Industrial rotary screw & reciprocating air compressors',
+      'Air dryers, moisture separators & filtration units',
+      'Compressor spares, service kits & pressure regulators',
+      'Air receivers & pneumatic distribution accessories',
+    ],
+    applications: [
+      'Manufacturing & assembly lines',
+      'Abrasive blasting air supply',
+      'Plant pneumatic utility networks',
+    ],
     image: '/images/featured/compressors.jpg',
     imageAlt: 'Industrial rotary air compressor unit on studio stage',
-    to: '/products/air-compressors',
-    ctaLabel: 'Explore Range',
+    to: '/products#compressors',
+    ctaLabel: 'View Specifications',
   },
   {
     code: '02',
+    slug: 'welding-machines',
     name: 'Welding Machines & Accessories',
     summary:
       'Heavy-duty welding machines, plasma cutters, MIG/TIG consumables, electrodes, torches, and cables.',
+    overview:
+      'Complete welding, cutting, and metal-joining equipment sourced for heavy structural fabrication, pipeline erection, and plant maintenance workshops.',
+    items: [
+      'Industrial MIG, TIG & arc inverter welding machines',
+      'Plasma cutting machines & replacement consumables',
+      'Welding torches, electrode holders, earth clamps & cables',
+      'Electrodes, filler wires & shielding gas accessories',
+    ],
+    applications: [
+      'Heavy structural steel fabrication',
+      'Pipeline & pressure vessel welding',
+      'Plant repair & turnaround maintenance',
+    ],
     image: '/images/featured/welding.jpg',
     imageAlt: 'Industrial inverter welding machine with torch and clamp',
-    to: '/products/welding-cutting',
-    ctaLabel: 'Explore Range',
+    to: '/products#welding-machines',
+    ctaLabel: 'View Specifications',
   },
   {
     code: '03',
+    slug: 'power-tools-dewalt',
     name: 'Power Tools',
     brand: 'DeWalt',
     summary:
       'Industrial DeWalt angle grinders, drilling machines, cordless tools, and cutting or grinding consumables.',
+    overview:
+      'Genuine DeWalt corded and cordless industrial power tools built for high-duty-cycle grinding, drilling, fastening, and site installation work.',
+    items: [
+      'DeWalt heavy-duty angle grinders & cut-off machines',
+      'Cordless hammer drills, impact wrenches & drivers',
+      'XR lithium-ion battery packs & fast chargers',
+      'Industrial grinding wheels, cutting discs & drill bits',
+    ],
+    applications: [
+      'Metal fabrication & weld seam finishing',
+      'Site erection & structural bolting',
+      'Industrial maintenance workshops',
+    ],
     image: '/images/featured/power-tools-dewalt.jpg',
     imageAlt: 'DeWalt industrial cordless drill and angle grinder kit',
-    to: '/products/power-tools',
-    ctaLabel: 'Explore Range',
+    to: '/products#power-tools-dewalt',
+    ctaLabel: 'View Specifications',
   },
   {
     code: '04',
+    slug: 'ndt-testing-magin',
     name: 'NDT Test Equipment',
     brand: 'Magin Ltd',
     summary:
       'Magin Ltd non-destructive testing instruments, dye penetrant, magnetic particle, and inspection consumables.',
+    overview:
+      'Precision non-destructive testing (NDT) equipment and inspection consumables from Magin Ltd for weld integrity verification, thickness gauging, and QA compliance.',
+    items: [
+      'Magin Ltd ultrasonic flaw detectors & thickness gauges',
+      'Magnetic particle inspection (MPI) yokes & consumables',
+      'Dye penetrant testing (DPT) kits, cleaners & developers',
+      'Calibration test blocks, probes & inspection accessories',
+    ],
+    applications: [
+      'Weld seam & structural integrity QA',
+      'Pressure vessel & pipeline inspection',
+      'Shutdown & turnaround NDT compliance',
+    ],
     image: '/images/featured/ndt-magin.jpg',
     imageAlt: 'Magin Ltd industrial ultrasonic NDT flaw detector unit',
-    to: '/products/ndt-inspection',
-    ctaLabel: 'Explore Range',
+    to: '/products#ndt-testing-magin',
+    ctaLabel: 'View Specifications',
   },
   {
     code: '05',
+    slug: 'airless-spray-graco',
     name: 'Airless Spray Machines',
     brand: 'Graco',
     summary:
       'High-pressure Graco airless coating sprayers, pumps, spray guns, and protective coating hose assemblies.',
+    overview:
+      'High-output Graco airless spray systems engineered for heavy protective coatings, epoxy primers, and high-viscosity industrial finishes with minimal overspray.',
+    items: [
+      'Graco electric & pneumatic airless spray machines',
+      'High-pressure fluid pumps, tips & tip guards',
+      'Airless spray guns, swivels & whip hoses',
+      'High-pressure coating hoses, filters & repair kits',
+    ],
+    applications: [
+      'Anti-corrosion & marine tank coatings',
+      'Structural steel & pipeline painting',
+      'Industrial epoxy & protective finishes',
+    ],
     image: '/images/featured/airless-spray-graco.jpg',
     imageAlt: 'Graco industrial airless paint sprayer cart with high-pressure hose',
-    to: '/contact',
-    ctaLabel: 'Request a Quote',
+    to: '/products#airless-spray-graco',
+    ctaLabel: 'View Specifications',
   },
   {
     code: '06',
+    slug: 'blasting-equipment',
     name: 'Blasting Equipment & Accessories',
     summary:
       'Abrasive blasting machines, pressure pots, blast hoses, couplings, nozzles, and surface prep consumables.',
+    overview:
+      'Complete abrasive blasting pots, deadman controls, wear-resistant nozzles, and operator safety gear for rapid rust removal and surface profile preparation.',
+    items: [
+      'Abrasive blasting pressure pots & metering valves',
+      'Heavy-duty blast hoses, couplings & nozzle holders',
+      'Tungsten carbide & boron carbide blast nozzles',
+      'Moisture separators, deadman handles & blasting spares',
+    ],
+    applications: [
+      'Pre-coating steel surface preparation',
+      'Shipyard hull & tank descaling',
+      'Pipeline & structural rust removal',
+    ],
     image: '/images/featured/blasting.jpg',
     imageAlt: 'Industrial abrasive sandblasting pressure pot and blast hose',
-    to: '/products/abrasive-blasting',
-    ctaLabel: 'Explore Range',
+    to: '/products#blasting-equipment',
+    ctaLabel: 'View Specifications',
   },
 ];

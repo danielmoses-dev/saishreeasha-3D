@@ -1,12 +1,24 @@
-import { Link } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { ArrowRight, Check } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { Reveal } from '../components/Reveal';
 import { CTASection } from '../components/CTASection';
-import { PRODUCT_CATEGORIES } from '../data/companyData';
+import { FEATURED_EQUIPMENT } from '../data/companyData';
 import './InnerPages.css';
 
 export function ProductsPage() {
+  const { hash } = useLocation();
+
+  useEffect(() => {
+    if (!hash) return;
+    const id = hash.replace('#', '');
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [hash]);
+
   return (
     <Layout hasHero>
       <section className="page-hero page-hero--with-bg">
@@ -15,10 +27,10 @@ export function ProductsPage() {
         <div className="container">
           <div className="page-hero__inner">
             <span className="eyebrow eyebrow--light">Products &amp; Solutions</span>
-            <h1 className="heading-xl page-hero__title">Core Industrial Product Portfolio</h1>
+            <h1 className="heading-xl page-hero__title">Core Industrial Equipment</h1>
             <p className="page-hero__lead">
-              Comprehensive sourcing across ten specialized categories — from process plant spares
-              and industrial piping to valves, instrumentation, welding, and surface preparation.
+              Application-ready industrial machinery, partner-brand tools, and surface-preparation
+              systems — including DeWalt, Magin Ltd, and Graco.
             </p>
           </div>
         </div>
@@ -26,23 +38,55 @@ export function ProductsPage() {
 
       <section className="section section--alt">
         <div className="container">
-          <div className="directory-grid">
-            {PRODUCT_CATEGORIES.map((category) => (
-              <Reveal key={category.slug}>
-                <Link to={`/products/${category.slug}`} className="directory-card">
-                  <div className="directory-card__media">
-                    <img src={category.image} alt={category.imageAlt} loading="lazy" />
-                    <span className="directory-card__code">CAT {category.code}</span>
+          <div className="catalog-stack">
+            {FEATURED_EQUIPMENT.map((item) => (
+              <Reveal key={item.slug}>
+                <article id={item.slug} className="catalog-item">
+                  <div className="catalog-item__stage">
+                    <span className="catalog-item__code">LINE {item.code}</span>
+                    {item.brand && (
+                      <span className="catalog-item__brand">{item.brand}</span>
+                    )}
+                    <img src={item.image} alt={item.imageAlt} loading="lazy" />
                   </div>
-                  <div className="directory-card__body">
-                    <h2 className="directory-card__title">{category.name}</h2>
-                    <p className="directory-card__desc">{category.intro}</p>
-                    <div className="directory-card__footer">
-                      <span>View Specifications &amp; Range</span>
-                      <ArrowRight size={16} />
+
+                  <div className="catalog-item__body">
+                    <h2 className="heading-md catalog-item__title">{item.name}</h2>
+                    <p className="body-md catalog-item__overview">{item.overview}</p>
+
+                    <div className="catalog-item__cols">
+                      <div>
+                        <h3 className="catalog-item__subhead">Equipment &amp; Accessories</h3>
+                        <ul className="catalog-item__list">
+                          {item.items.map((entry, idx) => (
+                            <li key={idx}>
+                              <Check size={15} className="catalog-item__check" aria-hidden="true" />
+                              <span>{entry}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div>
+                        <h3 className="catalog-item__subhead">Key Applications</h3>
+                        <div className="catalog-item__tags">
+                          {item.applications.map((app, idx) => (
+                            <span key={idx} className="catalog-item__tag">
+                              {app}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="catalog-item__actions">
+                      <Link to="/contact" className="btn btn--primary">
+                        Request a Quote
+                        <ArrowRight size={16} />
+                      </Link>
                     </div>
                   </div>
-                </Link>
+                </article>
               </Reveal>
             ))}
           </div>
